@@ -39,12 +39,12 @@ def getNormArr(ver, pol, normArr):
         normArr[j] = normArr[j]/np.linalg.norm(normArr[j])
     return normArr
 
-def paint(matrix, zbuf, cameraCoef, sizeCoef, ver, pol, normArr,vt):
+def paint(matrix, zbuf, cameraCoef, sizeCoef, ver, pol, normArr, vt, txtres):
     if(pol!=0):
         for i in pol:
             temp=cut(ver[i[0]-1][0],ver[i[0]-1][1],ver[i[0]-1][2],ver[i[1]-1][0],ver[i[1]-1][1],ver[i[1]-1][2],ver[i[2]-1][0],ver[i[2]-1][1],ver[i[2]-1][2])
             if(temp<0):
-                draw_tr(matrix, zbuf, cameraCoef, sizeCoef, ver[i[0]-1][0],ver[i[0]-1][1],ver[i[0]-1][2],ver[i[1]-1][0],ver[i[1]-1][1],ver[i[1]-1][2],ver[i[2]-1][0],ver[i[2]-1][1],ver[i[2]-1][2],normArr[i[0]-1],normArr[i[1]-1],normArr[i[2]-1],i,vt)
+                draw_tr(matrix, zbuf, cameraCoef, sizeCoef, ver[i[0]-1][0],ver[i[0]-1][1],ver[i[0]-1][2],ver[i[1]-1][0],ver[i[1]-1][1],ver[i[1]-1][2],ver[i[2]-1][0],ver[i[2]-1][1],ver[i[2]-1][2],normArr[i[0]-1],normArr[i[1]-1],normArr[i[2]-1],i,vt,txtres)
 
 def getMatrix(H, W, color):
     matrix = np.zeros((W, H, 3), dtype=np.uint8)
@@ -97,9 +97,9 @@ def bary(x0,y0,x1,y1,x2,y2,x,y):
     l2 = 1.0 - l0 - l1
     return l0, l1, l2
 
-def draw_tr(matrix,zbuf,cameraCoef,sizeCoef,x0,y0,z0,x1,y1,z1,x2,y2,z2,i0,i1,i2,ipol,vt):
+def draw_tr(matrix,zbuf,cameraCoef,sizeCoef,x0,y0,z0,x1,y1,z1,x2,y2,z2,i0,i1,i2,ipol,vt,txtres):
     # Сюда добавляем
-    a = 7000*cameraCoef*sizeCoef
+    a = (7000*cameraCoef)*sizeCoef
     px0, py0 =  (a * x0 / z0 + W/2), (a * y0 /z0 + H/2)
     px1, py1 =  (a * x1 / z1 + W/2), (a * y1 / z1 + H/2)
     px2, py2 =  (a * x2 / z2 + W/2), (a * y2 / z2 + H/2)
@@ -128,11 +128,12 @@ def draw_tr(matrix,zbuf,cameraCoef,sizeCoef,x0,y0,z0,x1,y1,z1,x2,y2,z2,i0,i1,i2,
             l0,l1,l2 = bary(px0,py0,px1,py1,px2,py2,x,y)
             if(l0>=0 and l1>=0 and l2>=0):
                 z=l0*z0+l1*z1+l2*z2
-                if(z < zbuf[y%H][x%W]):
+                if(z < zbuf[y][x]):
                     I = l0*I0+l1*I1+l2*I2
-                    color = (-I) * txtres[int(txtres.shape[0]*(l0*p0ResCoord[0]+l1*p1ResCoord[0]+l2*p2ResCoord[0]))][int(txtres.shape[1]*(l0*p0ResCoord[1]+l1*p1ResCoord[1]+l2*p2ResCoord[1]))]
-                    matrix[y%H][x%W] = color
-                    zbuf[y%H][x%W] = z
+                    I = max(0, min(1,-I))
+                    color = I * txtres[int((txtres.shape[0]-1)*(l0*p0ResCoord[0]+l1*p1ResCoord[0]+l2*p2ResCoord[0]))][int((txtres.shape[1]-1)*(l0*p0ResCoord[1]+l1*p1ResCoord[1]+l2*p2ResCoord[1]))]
+                    matrix[y][x] = color
+                    zbuf[y][x] = z
 
 def nor(x0,y0,z0,x1,y1,z1,x2,y2,z2):
     return np.cross(np.array([x1-x2,y1-y2,z1-z2]),np.array([x1-x0,y1-y0,z1-z0]))
@@ -142,17 +143,67 @@ def cut(x0,y0,z0,x1,y1,z1,x2,y2,z2):
     var = np.dot(nor(x0,y0,z0,x1,y1,z1,x2,y2,z2),l)/(np.linalg.norm(nor(x0,y0,z0,x1,y1,z1,x2,y2,z2))*np.linalg.norm(l))
     return var
 
+def quat_mult(q1, q2):
+    a1, b1, c1, d1 = q1
+    a2, b2, c2, d2 = q2
+    a = a1 * a2 - b1 * b2 - c1 * c2 - d1 * d2
+    b = a1 * b2 + b1 * a2 + c1 * d2 - d1 * c2
+    c = a1 * c2 - b1 * d2 + c1 * a2 + d1 * b2
+    d = a1 * d2 + b1 * c2 - c1 * b2 + d1 * a2
+    return np.array([a, b, c, d])
+
+def quat_norm(q):
+    norm = np.linalg.norm(q)
+    return q / norm if norm > 0 else q
+
+def resizeNew(ver, tx=0, ty=0, tz=0, quat_rotation=None):
+    if quat_rotation is None:
+        quat_rotation = np.array([1.0, 0.0, 0.0, 0.0])
+    
+    for i in ver:
+        rotated = quat_rotate_vector(quat_rotation, [i[0], i[1], i[2]])
+        i[0], i[1], i[2] = rotated[0] + tx, rotated[1] + ty, rotated[2] + tz
+    return ver
+
+def quat_rotate_vector(quater, vect):
+    a, b, c, d = quater
+    v_quater = np.array([0, vect[0], vect[1], vect[2]])
+    q_c = np.array([a, -b, -c, -d])
+    rotated = quat_mult(quat_mult(quater, v_quater), q_c)
+    return rotated[1:]
+
+def quat_from_euler(alpha, beta, gamma):
+    cx = np.cos(gamma * 0.5)
+    sx = np.sin(gamma * 0.5)
+    cy = np.cos(beta * 0.5)
+    sy = np.sin(beta * 0.5)
+    cx = np.cos(alpha * 0.5)
+    sx = np.sin(alpha * 0.5)
+
+    a = cx * cy * cx + sx * sy * sx  
+    b = sx * cy * cx - cx * sy * sx  
+    c = cx * sy * cx + sx * cy * sx 
+    d = cx * cy * sx - sx * sy * cx 
+    return quat_norm([a, b, c, d])
+
 W = 1600
 H = 900
-cameraCoef=0.17
-sizeCoef=1
-txtres = np.array(ImageOps.flip(Image.open("bunny-atlas.jpg")))
-print(txtres.shape)
-matrix = getMatrix(W, H,(0, 0, 0))
-ver, pol , vt = objParser("model_1.obj")
-normArr = np.zeros((len(ver), 3))
-ver=resize(ver,0,0,-cameraCoef, np.radians(0),np.radians(-90),np.radians(0))
-normArr=getNormArr(ver,pol,normArr)
+matrixIMG = getMatrix(W, H,(0, 0, 0))
+cameraCoefA=10.5
+sizeCoefA=0.05
+cameraCoefB=0.17
+sizeCoefB=0.4
+txtresA = np.array(ImageOps.flip(Image.open("AfroRes.bmp")))
+verA, polA , vtA = objParser("Afro.obj")
+normArrA = np.zeros((len(verA), 3))
+verA=resizeNew(verA,0,-1,cameraCoefA, quat_from_euler(0, m.pi, 0))
+normArrA=getNormArr(verA,polA,normArrA)
+txtresB = np.array(ImageOps.flip(Image.open("BunnyRes.jpg")))
+verB, polB , vtB = objParser("Bunny.obj")
+normArrB = np.zeros((len(verB), 3))
+verB=resizeNew(verB,0,0,cameraCoefB, quat_from_euler(0, -m.pi/2, 0))
+normArrB=getNormArr(verB,polB,normArrB)
 zbuf=getZBuff(W,H)
-paint(matrix,zbuf,cameraCoef,sizeCoef,ver,pol,normArr,vt)
-saveMatrixAsIMG(matrix)
+paint(matrixIMG,zbuf,cameraCoefA,sizeCoefA,verA,polA,normArrA,vtA, txtresA)
+paint(matrixIMG,zbuf,cameraCoefB,sizeCoefB,verB,polB,normArrB,vtB, txtresB)
+saveMatrixAsIMG(matrixIMG)
