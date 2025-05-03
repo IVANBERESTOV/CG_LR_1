@@ -143,7 +143,7 @@ def cut(x0,y0,z0,x1,y1,z1,x2,y2,z2):
     var = np.dot(nor(x0,y0,z0,x1,y1,z1,x2,y2,z2),l)/(np.linalg.norm(nor(x0,y0,z0,x1,y1,z1,x2,y2,z2))*np.linalg.norm(l))
     return var
 
-def quat_mult(q1, q2):
+def quatMult(q1, q2):
     a1, b1, c1, d1 = q1
     a2, b2, c2, d2 = q2
     a = a1 * a2 - b1 * b2 - c1 * c2 - d1 * d2
@@ -152,7 +152,7 @@ def quat_mult(q1, q2):
     d = a1 * d2 + b1 * c2 - c1 * b2 + d1 * a2
     return np.array([a, b, c, d])
 
-def quat_norm(q):
+def quatNorm(q):
     norm = np.linalg.norm(q)
     return q / norm if norm > 0 else q
 
@@ -161,30 +161,32 @@ def resizeNew(ver, tx=0, ty=0, tz=0, quat_rotation=None):
         quat_rotation = np.array([1.0, 0.0, 0.0, 0.0])
     
     for i in ver:
-        rotated = quat_rotate_vector(quat_rotation, [i[0], i[1], i[2]])
+        rotated = quatRotateVector(quat_rotation, [i[0], i[1], i[2]])
         i[0], i[1], i[2] = rotated[0] + tx, rotated[1] + ty, rotated[2] + tz
     return ver
 
-def quat_rotate_vector(quater, vect):
+def quatRotateVector(quater, vect):
     a, b, c, d = quater
     v_quater = np.array([0, vect[0], vect[1], vect[2]])
     q_c = np.array([a, -b, -c, -d])
-    rotated = quat_mult(quat_mult(quater, v_quater), q_c)
+    rotated = quatMult(quatMult(quater, v_quater), q_c)
     return rotated[1:]
 
-def quat_from_euler(alpha, beta, gamma):
-    cx = np.cos(gamma * 0.5)
-    sx = np.sin(gamma * 0.5)
-    cy = np.cos(beta * 0.5)
-    sy = np.sin(beta * 0.5)
+def getQuat(alpha, beta, gamma):
     cx = np.cos(alpha * 0.5)
     sx = np.sin(alpha * 0.5)
 
-    a = cx * cy * cx + sx * sy * sx  
-    b = sx * cy * cx - cx * sy * sx  
-    c = cx * sy * cx + sx * cy * sx 
-    d = cx * cy * sx - sx * sy * cx 
-    return quat_norm([a, b, c, d])
+    cy = np.cos(beta * 0.5)
+    sy = np.sin(beta * 0.5)
+
+    cz = np.cos(gamma * 0.5)
+    sz = np.sin(gamma * 0.5)
+    
+    a = cx * cy * cz + sx * sy * sz
+    b = sx * cy * cz - cx * sy * sz
+    c = cx * sy * cz + sx * cy * sz
+    d = cx * cy * sz - sx * sy * cz
+    return quatNorm([a, b, c, d])
 
 W = 1600
 H = 900
@@ -196,12 +198,12 @@ sizeCoefB=0.4
 txtresA = np.array(ImageOps.flip(Image.open("AfroRes.bmp")))
 verA, polA , vtA = objParser("Afro.obj")
 normArrA = np.zeros((len(verA), 3))
-verA=resizeNew(verA,0,-1,cameraCoefA, quat_from_euler(0, m.pi, 0))
+verA=resizeNew(verA,0,-1,cameraCoefA, getQuat(0, m.pi, 0))
 normArrA=getNormArr(verA,polA,normArrA)
 txtresB = np.array(ImageOps.flip(Image.open("BunnyRes.jpg")))
 verB, polB , vtB = objParser("Bunny.obj")
 normArrB = np.zeros((len(verB), 3))
-verB=resizeNew(verB,0,0,cameraCoefB, quat_from_euler(0, -m.pi/2, 0))
+verB=resizeNew(verB,0,0,cameraCoefB, getQuat(0, -m.pi/2, 0))
 normArrB=getNormArr(verB,polB,normArrB)
 zbuf=getZBuff(W,H)
 paint(matrixIMG,zbuf,cameraCoefA,sizeCoefA,verA,polA,normArrA,vtA, txtresA)
